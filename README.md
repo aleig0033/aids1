@@ -1,143 +1,141 @@
--- LocalScript / StarterPlayerScripts
+--// SERVICES
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local Camera = workspace.CurrentCamera
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+--// CONFIGS
 local LP = Players.LocalPlayer
-local ValidateKey = ReplicatedStorage:WaitForChild("ValidateKey")
+local MAX_SPEED = 200
+local RunSpeed, FlySpeed, LockRange = 50, 100, 100
+local Running, Flying = false, false
+local CurrentTarget = nil
 
--- KEYS
-local remainingTime = 0
-local isPermanent = false
-
--- PAINEL
-local ScreenGui = Instance.new("ScreenGui", LP.PlayerGui)
+--// UI PRINCIPAL
+local ScreenGui = Instance.new("ScreenGui", LP:WaitForChild("PlayerGui"))
+ScreenGui.Name = "RestoredLegacy"
 ScreenGui.ResetOnSpawn = false
 
-local ToggleCircle = Instance.new("ImageButton", ScreenGui)
-ToggleCircle.Size = UDim2.new(0,60,0,60)
-ToggleCircle.Position = UDim2.new(1,-80,1,-80)
-ToggleCircle.BackgroundTransparency = 1
-ToggleCircle.Image = "rbxassetid://SEU_ASSET_ID_AQUI"
-Instance.new("UICorner", ToggleCircle).CornerRadius = UDim.new(1,0)
+local Frame = Instance.new("Frame", ScreenGui)
+Frame.Size = UDim2.new(0, 250, 0, 280) 
+Frame.Position = UDim2.new(0.5, -125, 0.5, -140)
+Frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+Frame.BorderSizePixel = 0
+Instance.new("UICorner", Frame).CornerRadius = UDim.new(0, 10)
 
-local Panel = Instance.new("Frame", ScreenGui)
-Panel.Size = UDim2.new(0,300,0,200)
-Panel.Position = UDim2.new(0.5,-150,0.5,-100)
-Panel.BackgroundColor3 = Color3.fromRGB(25,25,25)
-Panel.Visible = false
-Instance.new("UICorner", Panel).CornerRadius = UDim.new(0,10)
+-- FOTO DA PRAIA (CARREGADA VIA ASSET ID)
+local Photo = Instance.new("ImageLabel", Frame)
+Photo.Size = UDim2.new(0, 60, 0, 60)
+Photo.Position = UDim2.new(0.5, -30, 0, 12)
+Photo.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+-- ID convertido para Asset do Roblox (Foto da moça na praia)
+Photo.Image = "rbxassetid://12373722008" 
+Photo.BorderSizePixel = 0
+local PhotoCorner = Instance.new("UICorner", Photo)
+PhotoCorner.CornerRadius = UDim.new(1, 0)
 
-local KeyBox = Instance.new("TextBox", Panel)
-KeyBox.Size = UDim2.new(1,-40,0,40)
-KeyBox.Position = UDim2.new(0,20,0,40)
-KeyBox.PlaceholderText = "Digite a key..."
+local PhotoStroke = Instance.new("UIStroke", Photo)
+PhotoStroke.Thickness = 2
+PhotoStroke.Color = Color3.fromRGB(255, 255, 255)
 
-local Submit = Instance.new("TextButton", Panel)
-Submit.Size = UDim2.new(1,-40,0,40)
-Submit.Position = UDim2.new(0,20,0,90)
-Submit.Text = "ATIVAR"
+-- BOTÃO FECHAR
+local Close = Instance.new("TextButton", Frame)
+Close.Size = UDim2.new(0, 25, 0, 25)
+Close.Position = UDim2.new(1, -30, 0, 5)
+Close.BackgroundTransparency = 1; Close.Text = "×"; Close.TextColor3 = Color3.fromRGB(255, 80, 80); Close.TextSize = 25
+Close.MouseButton1Click:Connect(function() ScreenGui:Destroy() end)
 
-local TimeLabel = Instance.new("TextLabel", Panel)
-TimeLabel.Size = UDim2.new(1,0,0,20)
-TimeLabel.Position = UDim2.new(0,0,1,-30)
-TimeLabel.BackgroundTransparency = 1
-TimeLabel.TextColor3 = Color3.fromRGB(80,255,80)
-TimeLabel.Font = Enum.Font.GothamBold
+-- SLIDERS ORIGINAIS
+local function CreateSlider(name, yPos, defaultVal, maxVal, color, varType)
+    local label = Instance.new("TextLabel", Frame)
+    label.Size = UDim2.new(1, -20, 0, 18); label.Position = UDim2.new(0, 10, 0, yPos)
+    label.Text = name..": "..defaultVal; label.TextColor3 = Color3.fromRGB(220, 220, 220); label.BackgroundTransparency = 1; label.Font = Enum.Font.Gotham; label.TextSize = 13; label.TextXAlignment = Enum.TextXAlignment.Left
+    
+    local bg = Instance.new("Frame", Frame)
+    bg.Size = UDim2.new(1, -20, 0, 10); bg.Position = UDim2.new(0, 10, 0, yPos + 20); bg.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    Instance.new("UICorner", bg).CornerRadius = UDim.new(1, 0)
+    
+    local bar = Instance.new("Frame", bg)
+    bar.Size = UDim2.new(defaultVal/maxVal, 0, 1, 0); bar.BackgroundColor3 = color; Instance.new("UICorner", bar).CornerRadius = UDim.new(1, 0)
 
-local function formatTime(sec)
-	local h = math.floor(sec/3600)
-	local m = math.floor((sec%3600)/60)
-	local s = sec%60
-	return string.format("%02d:%02d:%02d",h,m,s)
+    bg.InputBegan:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 then
+            local connection
+            connection = RunService.RenderStepped:Connect(function()
+                if not UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then connection:Disconnect() return end
+                local r = math.clamp((UIS:GetMouseLocation().X - bg.AbsolutePosition.X)/bg.AbsoluteSize.X, 0, 1)
+                local val = math.floor(r * maxVal)
+                bar.Size = UDim2.new(r, 0, 1, 0); label.Text = name..": "..val
+                if varType == 1 then LockRange = val elseif varType == 2 then RunSpeed = val elseif varType == 3 then FlySpeed = val end
+            end)
+        end
+    end)
 end
 
--- Toggle painel
-ToggleCircle.MouseButton1Click:Connect(function()
-	Panel.Visible = not Panel.Visible
-end)
+CreateSlider("Range", 85, LockRange, 250, Color3.fromRGB(80, 255, 80), 1)
+CreateSlider("Corrida", 145, RunSpeed, MAX_SPEED, Color3.fromRGB(80, 150, 255), 2)
+CreateSlider("Voo (Fly)", 205, FlySpeed, MAX_SPEED, Color3.fromRGB(255, 150, 80), 3)
 
--- Ativar key
-Submit.MouseButton1Click:Connect(function()
-	local ok, permanent, timeOrErr = ValidateKey:InvokeServer(KeyBox.Text)
-	if ok then
-		Panel.Visible = true
-		isPermanent = permanent
-		remainingTime = timeOrErr or 0
-	else
-		KeyBox.Text = timeOrErr
-	end
-end)
+--// ESP DE CAIXAS (BOXES) ANTIGO
+local function AddESP(p)
+    if p == LP then return end
+    local Box = Instance.new("BoxHandleAdornment")
+    Box.AlwaysOnTop = true; Box.ZIndex = 10; Box.Transparency = 0.6; Box.Color3 = Color3.new(1, 0, 0); Box.Size = Vector3.new(4, 6, 0.5)
+    
+    local function Update()
+        if p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+            Box.Adornee = p.Character.HumanoidRootPart; Box.Parent = game.CoreGui
+        else
+            Box.Adornee = nil
+        end
+    end
+    RunService.RenderStepped:Connect(Update)
+end
+for _, p in pairs(Players:GetPlayers()) do AddESP(p) end
+Players.PlayerAdded:Connect(AddESP)
 
--- CONTADOR
+--// LOCK-ON ANTIGO (FOCO AUTOMÁTICO)
+local function GetClosest()
+    local target, dist = nil, LockRange
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LP and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+            local pos, onScreen = Camera:WorldToViewportPoint(p.Character.HumanoidRootPart.Position)
+            if onScreen then
+                local mag = (Vector2.new(pos.X, pos.Y) - Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)).Magnitude
+                if mag < dist then dist = mag; target = p.Character.HumanoidRootPart end
+            end
+        end
+    end
+    return target
+end
+
+--// LOOP DE MOVIMENTO
 RunService.RenderStepped:Connect(function()
-	if remainingTime > 0 and not isPermanent then
-		remainingTime -= 1/60
-		TimeLabel.Text = "Tempo restante: "..formatTime(math.max(0,remainingTime))
-	end
+    if Running and LP.Character and LP.Character:FindFirstChild("Humanoid") then LP.Character.Humanoid.WalkSpeed = RunSpeed end
+    if Flying and LP.Character and LP.Character:FindFirstChild("HumanoidRootPart") and LP.Character.HumanoidRootPart:FindFirstChild("FlyBV") then
+        local dir = (Camera.CFrame.LeftVector * (UIS:IsKeyDown(Enum.KeyCode.A) and 1 or UIS:IsKeyDown(Enum.KeyCode.D) and -1 or 0) + Camera.CFrame.LookVector * (UIS:IsKeyDown(Enum.KeyCode.W) and 1 or UIS:IsKeyDown(Enum.KeyCode.S) and -1 or 0))
+        LP.Character.HumanoidRootPart.FlyBV.Velocity = dir * FlySpeed
+        LP.Character.HumanoidRootPart.FlyBG.CFrame = Camera.CFrame
+    end
+    if CurrentTarget then Camera.CFrame = CFrame.new(Camera.CFrame.Position, CurrentTarget.Position) end
 end)
 
--- MOVIMENTO & FLY
-local MIN_SPEED = 16
-local MAX_SPEED = 300
-local RunSpeed = 300
-local FlySpeed = 300
-local Running, Flying = false,false
-local BV,BG
-local NormalSpeed = 16
-
-local function getHum() return LP.Character and LP.Character:FindFirstChildOfClass("Humanoid") end
-local function getHRP() return LP.Character and LP.Character:FindFirstChild("HumanoidRootPart") end
-
-UIS.InputBegan:Connect(function(i,gp)
-	if gp then return end
-	if i.KeyCode == Enum.KeyCode.V then
-		local hum = getHum()
-		if hum then Running = true; NormalSpeed = hum.WalkSpeed; hum.WalkSpeed = RunSpeed end
-	end
-	if i.KeyCode == Enum.KeyCode.N then
-		local hrp,h = getHRP(),getHum()
-		if hrp and h then
-			Flying = not Flying
-			if Flying then
-				h:ChangeState(Enum.HumanoidStateType.Physics)
-				BV = Instance.new("BodyVelocity", hrp)
-				BV.MaxForce = Vector3.new(1e9,1e9,1e9)
-				BG = Instance.new("BodyGyro", hrp)
-				BG.MaxTorque = Vector3.new(1e9,1e9,1e9)
-			else
-				if BV then BV:Destroy() end
-				if BG then BG:Destroy() end
-				h:ChangeState(Enum.HumanoidStateType.GettingUp)
-			end
-		end
-	end
+--// INPUTS (TECLAS)
+UIS.InputBegan:Connect(function(i, gp)
+    if gp then return end
+    if i.KeyCode == Enum.KeyCode.V then Running = true
+    elseif i.KeyCode == Enum.KeyCode.T then CurrentTarget = (CurrentTarget and nil or GetClosest())
+    elseif i.KeyCode == Enum.KeyCode.Semicolon then Frame.Visible = not Frame.Visible
+    elseif i.KeyCode == Enum.KeyCode.N then
+        Flying = not Flying
+        local hrp = LP.Character:FindFirstChild("HumanoidRootPart")
+        if Flying then
+            local bv = Instance.new("BodyVelocity", hrp); bv.Name = "FlyBV"; bv.MaxForce = Vector3.new(1e9,1e9,1e9)
+            local bg = Instance.new("BodyGyro", hrp); bg.Name = "FlyBG"; bg.MaxTorque = Vector3.new(1e9,1e9,1e9)
+        else
+            if hrp:FindFirstChild("FlyBV") then hrp.FlyBV:Destroy() end
+            if hrp:FindFirstChild("FlyBG") then hrp.FlyBG:Destroy() end
+        end
+    end
 end)
-
-UIS.InputEnded:Connect(function(i,gp)
-	if gp then return end
-	if i.KeyCode == Enum.KeyCode.V then
-		local hum = getHum()
-		if hum then Running = false; hum.WalkSpeed = NormalSpeed end
-	end
-end)
-
--- RENDERSTEPPED LOOP
-RunService.RenderStepped:Connect(function()
-	local hum,hrp = getHum(),getHRP()
-	if Running and hum then hum.WalkSpeed = RunSpeed end
-	if Flying and BV and BG then
-		local dir = Vector3.zero
-		local cam = Camera.CFrame
-		if UIS:IsKeyDown(Enum.KeyCode.W) then dir += cam.LookVector end
-		if UIS:IsKeyDown(Enum.KeyCode.S) then dir -= cam.LookVector end
-		if UIS:IsKeyDown(Enum.KeyCode.A) then dir -= cam.RightVector end
-		if UIS:IsKeyDown(Enum.KeyCode.D) then dir += cam.RightVector end
-		if UIS:IsKeyDown(Enum.KeyCode.Space) then dir += Vector3.new(0,1,0) end
-		if UIS:IsKeyDown(Enum.KeyCode.LeftControl) then dir -= Vector3.new(0,1,0) end
-		BV.Velocity = dir.Magnitude>0 and dir.Unit*FlySpeed or Vector3.zero
-		BG.CFrame = cam
-	end
-end)
+UIS.InputEnded:Connect(function(i) if i.KeyCode == Enum.KeyCode.V then Running = false end end)
